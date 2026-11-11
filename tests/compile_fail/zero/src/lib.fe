@@ -1,0 +1,5 @@
+use apportion::{allocate, TieBreak}
+
+pub fn invalid() {
+    let _result = allocate(1, [1; 0], TieBreak::Index)
+}

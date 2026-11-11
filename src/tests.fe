@@ -1,0 +1,129 @@
+use ingot::{allocate, allocate_capped, TieBreak}
+use core::panic
+
+#[test]
+fn equal_weights_assign_every_unit() {
+    let result = match allocate(10, [1, 1, 1], TieBreak::Index) {
+        Result::Ok(value) => value,
+        Result::Err(_) => panic(),
+    }
+    assert!(result.shares[0] == 4)
+    assert!(result.shares[1] == 3)
+    assert!(result.shares[2] == 3)
+}
+
+#[test]
+fn caps_redistribute_excess() {
+    let result = match allocate_capped(100, [8, 1, 1], [40, 100, 100], TieBreak::Index) {
+        Result::Ok(value) => value,
+        Result::Err(_) => panic(),
+    }
+    assert!(result.shares[0] == 40)
+    assert!(result.shares[1] == 30)
+    assert!(result.shares[2] == 30)
+    assert!(result.saturated[0])
+    assert!(!result.saturated[1])
+    assert!(result.rounding_denominator == 2)
+    assert!(result.remainders[0] == 0)
+    assert!(result.remainders[1] == 0)
+}
+
+#[test]
+fn audit_distinguishes_cap_freezing_from_rounding_to_cap() {
+    let result = match allocate_capped(2, [1, 1, 1], [1, 1, 1], TieBreak::Index) {
+        Result::Ok(value) => value,
+        Result::Err(_) => panic(),
+    }
+    assert!(result.shares[0] == 1)
+    assert!(result.bonuses[0])
+    assert!(!result.saturated[0])
+    assert!(!result.saturated[1])
+    assert!(!result.saturated[2])
+    assert!(result.rounding_denominator == 3)
+    assert!(result.remainders[0] == 2)
+    assert!(result.remainders[1] == 2)
+    assert!(result.remainders[2] == 2)
+}
+
+#[test]
+fn rotating_ties_is_explicit_and_wraps() {
+    let result = match allocate(10, [1, 1, 1], TieBreak::Rotate(5)) {
+        Result::Ok(value) => value,
+        Result::Err(_) => panic(),
+    }
+    assert!(result.shares[0] == 3)
+    assert!(result.shares[1] == 3)
+    assert!(result.shares[2] == 4)
+    assert!(result.bonuses[2])
+    assert!(result.remainders[0] == 1)
+    assert!(result.rounding_denominator == 3)
+}
+
+#[test]
+fn zero_budget_has_no_residual_quota_stage() {
+    let result = match allocate_capped(0, [0, 0], [0, 0], TieBreak::Index) {
+        Result::Ok(value) => value,
+        Result::Err(_) => panic(),
+    }
+    assert!(result.shares[0] == 0)
+    assert!(!result.bonuses[0])
+    assert!(!result.saturated[0])
+    assert!(result.remainders[0] == 0)
+    assert!(result.rounding_denominator == 0)
+}
+
+#[test]
+fn all_budget_frozen_has_no_residual_quota_stage() {
+    let result = match allocate_capped(6, [1, 2], [2, 4], TieBreak::Index) {
+        Result::Ok(value) => value,
+        Result::Err(_) => panic(),
+    }
+    assert!(result.saturated[0])
+    assert!(result.saturated[1])
+    assert!(!result.bonuses[0])
+    assert!(result.rounding_denominator == 0)
+}
+
+#[test]
+fn exact_quota_can_have_nonzero_denominator_without_bonuses() {
+    let result = match allocate_capped(6, [1, 2], [100, 100], TieBreak::Index) {
+        Result::Ok(value) => value,
+        Result::Err(_) => panic(),
+    }
+    assert!(result.rounding_denominator == 3)
+    assert!(!result.bonuses[0])
+    assert!(!result.bonuses[1])
+    assert!(result.remainders[0] == 0)
+    assert!(result.remainders[1] == 0)
+}
+
+#[test]
+fn more_total_can_reduce_a_share_hamilton_is_not_house_monotone() {
+    let weights: [u128; 6] = [1500, 1500, 900, 500, 500, 200]
+    let before = match allocate(25, weights, TieBreak::Index) {
+        Result::Ok(value) => value,
+        Result::Err(_) => panic(),
+    }
+    let after = match allocate(26, weights, TieBreak::Index) {
+        Result::Ok(value) => value,
+        Result::Err(_) => panic(),
+    }
+    assert!(before.shares[3] == 3)
+    assert!(before.shares[4] == 3)
+    assert!(after.shares[3] == 2)
+    assert!(after.shares[4] == 2)
+}
+
+#[test]
+fn identity_splitting_can_change_combined_allocation() {
+    let before = match allocate(2, [2, 1, 1], TieBreak::Index) {
+        Result::Ok(value) => value,
+        Result::Err(_) => panic(),
+    }
+    let after = match allocate(2, [1, 1, 1, 1], TieBreak::Index) {
+        Result::Ok(value) => value,
+        Result::Err(_) => panic(),
+    }
+    assert!(before.shares[0] == 1)
+    assert!(after.shares[0] + after.shares[1] == 2)
+}

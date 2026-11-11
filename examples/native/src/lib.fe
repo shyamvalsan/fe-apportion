@@ -1,0 +1,222 @@
+use apportion::{allocate_capped, AllocationError, TieBreak}
+use std::io::{Read, Write, host, read_char, write, write_char, writeln}
+
+struct Token { bytes: [u8; 80], len: usize, overflow: bool }
+
+fn next_token() -> Option<Token> uses (r: mut Read) {
+    var bytes: [u8; 80] = [0; 80]
+    var len: usize = 0
+    while true {
+        let c = read_char()
+        let end = c < 0
+        let space = c == 32 || c == 9 || c == 10 || c == 13
+        if end || space {
+            if len > 0 {
+                return Some(Token { bytes, len, overflow: false })
+            }
+            if end { return None }
+        } else {
+            if len == 80 {
+                return Some(Token { bytes, len, overflow: true })
+            }
+            bytes[len] = c.downcast().unwrap()
+            len += 1
+        }
+    }
+    None
+}
+
+fn number(_ arg: Token, _ start: usize, _ end: usize) -> Option<u128> {
+    if arg.overflow || start == end {
+        return None
+    }
+    var value: u128 = 0
+    var i = start
+    while i < end {
+        let b = arg.bytes[i]
+        if b < 48 || b > 57 {
+            return None
+        }
+        let digit = (b - 48) as u128
+        if value > (u128::max() - digit) / 10 {
+            return None
+        }
+        value = value * 10 + digit
+        i += 1
+    }
+    Some(value)
+}
+
+fn recipient(_ arg: Token, _ default_cap: u128) -> Option<(u128, u128)> {
+    var colon = arg.len
+    var i: usize = 0
+    while i < arg.len {
+        if arg.bytes[i] == 58 {
+            if colon != arg.len {
+                return None
+            }
+            colon = i
+        }
+        i += 1
+    }
+    let weight = match number(arg, 0, colon) {
+        Some(value) => value,
+        None => {
+            return None
+        },
+    }
+    let cap = if colon == arg.len {
+        default_cap
+    } else {
+        match number(arg, colon + 1, arg.len) {
+            Some(value) => value,
+            None => {
+                return None
+            },
+        }
+    }
+    Some((weight, cap))
+}
+
+fn decimal(_ value: u256) uses (w: mut Write) {
+    if value == 0 {
+        write_char(48)
+        return
+    }
+    var digits: [u8; 78] = [0; 78]
+    var len: usize = 0
+    var rest = value
+    while rest > 0 {
+        digits[len] = (rest % 10).downcast().unwrap()
+        rest /= 10
+        len += 1
+    }
+    while len > 0 {
+        len -= 1
+        write_char((digits[len] + 48) as i32)
+    }
+}
+
+fn run() -> i32 uses (r: mut Read, w: mut Write) {
+    let total_arg = match next_token() {
+        Some(value) => value,
+        None => {
+            writeln("{\"error\":\"MissingTotal\"}")
+            return 2
+        },
+    }
+    let total = match number(total_arg, 0, total_arg.len) {
+        Some(value) => value,
+        None => {
+            writeln("{\"error\":\"InvalidTotal\"}")
+            return 2
+        },
+    }
+    let rotate_arg = match next_token() {
+        Some(value) => value,
+        None => {
+            writeln("{\"error\":\"MissingTieStart\"}")
+            return 2
+        },
+    }
+    let rotate = match number(rotate_arg, 0, rotate_arg.len) {
+        Some(value) => value,
+        None => {
+            writeln("{\"error\":\"InvalidTieStart\"}")
+            return 2
+        },
+    }
+    var weights: [u128; 64] = [0; 64]
+    var caps: [u128; 64] = [0; 64]
+    var count: usize = 0
+    while true {
+        let token = match next_token() {
+            Some(value) => value,
+            None => {
+                break
+            },
+        }
+        if count == 64 {
+            writeln("{\"error\":\"TooManyRecipients\"}")
+            return 2
+        }
+        match recipient(token, total) {
+            Some((weight, cap)) => {
+                weights[count] = weight
+                caps[count] = cap
+            },
+            None => {
+                writeln("{\"error\":\"InvalidRecipient\"}")
+                return 2
+            },
+        }
+        count += 1
+    }
+    if count == 0 {
+        writeln("{\"error\":\"MissingRecipients\"}")
+        return 2
+    }
+    let count128: u128 = (count as u256).downcast().unwrap()
+    let start: usize = (rotate % count128).downcast().unwrap()
+    let result = match allocate_capped(total, weights, caps, TieBreak::Rotate(start)) {
+        Result::Ok(value) => value,
+        Result::Err(AllocationError::NoPositiveWeight) => {
+            writeln("{\"error\":\"NoPositiveWeight\"}")
+            return 2
+        },
+        Result::Err(AllocationError::InsufficientCapacity) => {
+            writeln("{\"error\":\"InsufficientCapacity\"}")
+            return 2
+        },
+    }
+    write("{\"shares\":[")
+    var i: usize = 0
+    while i < count {
+        if i > 0 { write_char(44) }
+        write_char(34)
+        decimal(result.shares[i] as u256)
+        write_char(34)
+        i += 1
+    }
+    write("],\"rounded_up\":[")
+    i = 0
+    while i < count {
+        if i > 0 { write_char(44) }
+        if result.bonuses[i] {
+            write("true")
+        } else {
+            write("false")
+        }
+        i += 1
+    }
+    write("],\"saturated\":[")
+    i = 0
+    while i < count {
+        if i > 0 { write_char(44) }
+        if result.saturated[i] {
+            write("true")
+        } else {
+            write("false")
+        }
+        i += 1
+    }
+    write("],\"remainders\":[")
+    i = 0
+    while i < count {
+        if i > 0 { write_char(44) }
+        write_char(34)
+        decimal(result.remainders[i])
+        write_char(34)
+        i += 1
+    }
+    write("],\"rounding_denominator\":\"")
+    decimal(result.rounding_denominator)
+    writeln("\"}")
+    0
+}
+
+pub fn main() -> i32 {
+    with (Read = host(), Write = host()) {
+        run()
+    }
+}

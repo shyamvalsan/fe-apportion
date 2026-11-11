@@ -1,0 +1,92 @@
+[
+  {
+    "check": "compiler-version",
+    "passed": true,
+    "exit_code": 0,
+    "seconds": 0.071
+  },
+  {
+    "check": "oracle-fixtures",
+    "passed": true,
+    "exit_code": 0,
+    "seconds": 0.142
+  },
+  {
+    "check": "format-src",
+    "passed": true,
+    "exit_code": 0,
+    "seconds": 0.091
+  },
+  {
+    "check": "format-examples-native",
+    "passed": true,
+    "exit_code": 0,
+    "seconds": 0.085
+  },
+  {
+    "check": "format-examples-evm",
+    "passed": true,
+    "exit_code": 0,
+    "seconds": 0.075
+  },
+  {
+    "check": "format-tests-compile_fail",
+    "passed": true,
+    "exit_code": 0,
+    "seconds": 0.079
+  },
+  {
+    "check": "library-evm",
+    "passed": true,
+    "exit_code": 0,
+    "seconds": 10.691
+  },
+  {
+    "check": "adapter-evm",
+    "passed": true,
+    "exit_code": 0,
+    "seconds": 2.12
+  },
+  {
+    "check": "adapter-build",
+    "passed": true,
+    "exit_code": 0,
+    "seconds": 1.626
+  },
+  {
+    "check": "reject-zero",
+    "passed": true,
+    "exit_code": 1,
+    "seconds": 0.351
+  },
+  {
+    "check": "reject-sixty_five",
+    "passed": true,
+    "exit_code": 1,
+    "seconds": 0.343
+  },
+  {
+    "check": "library-native",
+    "passed": true,
+    "exit_code": 0,
+    "seconds": 1.758
+  },
+  {
+    "check": "cli-build",
+    "passed": true,
+    "exit_code": 0,
+    "seconds": 1.864
+  },
+  {
+    "check": "cli-oracle",
+    "passed": true,
+    "exit_code": 0,
+    "seconds": 8.274
+  },
+  {
+    "check": "cli-input",
+    "passed": true,
+    "exit_code": 0,
+    "seconds": 1.631
+  }
+]

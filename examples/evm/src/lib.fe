@@ -1,0 +1,60 @@
+use apportion::{allocate_capped, AllocationError, TieBreak}
+
+// A calculation-only adapter: no storage, token transfers, or external calls.
+// Pad unused positions with zero weights and caps. Tie rotation is modulo eight.
+pub msg PreviewMsg {
+    #[selector = sol("preview(uint128,uint128[8],uint128[8],uint8)")]
+    Preview { total: u128, weights: [u128; 8], caps: [u128; 8], tie_start: u8 } -> (
+        u8,
+        [u128; 8],
+        [bool; 8],
+        [bool; 8],
+        [u256; 8],
+        u256,
+    ),
+}
+
+pub contract AllocationPreview {
+    recv PreviewMsg {
+        Preview { total, weights, caps, tie_start } -> (
+            u8,
+            [u128; 8],
+            [bool; 8],
+            [bool; 8],
+            [u256; 8],
+            u256,
+        ) {
+            match allocate_capped(
+                total,
+                weights,
+                caps,
+                TieBreak::Rotate(tie_start as usize),
+            ) {
+                Result::Ok(value) => (
+                    0,
+                    value.shares,
+                    value.bonuses,
+                    value.saturated,
+                    value.remainders,
+                    value.rounding_denominator,
+                ),
+                Result::Err(AllocationError::NoPositiveWeight) => (
+                    1,
+                    [0; 8],
+                    [false; 8],
+                    [false; 8],
+                    [0; 8],
+                    0,
+                ),
+                Result::Err(AllocationError::InsufficientCapacity) => (
+                    2,
+                    [0; 8],
+                    [false; 8],
+                    [false; 8],
+                    [0; 8],
+                    0,
+                ),
+            }
+        }
+    }
+}

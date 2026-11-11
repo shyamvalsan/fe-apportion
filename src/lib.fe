@@ -1,0 +1,147 @@
+//! Exact integer apportionment with explicit caps and reproducible rounding.
+
+use core::num::IntDowncast
+
+pub enum AllocationError {
+    NoPositiveWeight,
+    InsufficientCapacity,
+}
+
+/// Equal remainders are resolved by input index, optionally rotated.
+/// The caller must choose stable identities/order before observing the result.
+pub enum TieBreak {
+    Index,
+    Rotate(usize),
+}
+
+pub struct Allocation<const N: usize> {
+    pub shares: [u128; N],
+    /// True exactly when largest-remainder rounding added one unit.
+    pub bonuses: [bool; N],
+    /// Frozen at a binding cap before rounding; not simply shares[i] == caps[i].
+    pub saturated: [bool; N],
+    /// Final uncapped quota numerator modulo rounding_denominator; otherwise 0.
+    pub remainders: [u256; N],
+    pub rounding_denominator: u256,
+}
+
+/// Allocate every unit proportionally, using largest remainders.
+/// `u128` inputs and at most 64 recipients make intermediate products fit u256.
+pub fn allocate<const N: usize>(
+    _ total: u128,
+    _ weights: [u128; N],
+    _ tie_break: TieBreak,
+) -> Result<AllocationError, Allocation<N>>
+where N > 0 && N <= 64
+{
+    allocate_capped(total, weights, [total; N], tie_break)
+}
+
+/// Weighted water filling followed by largest-remainder integer rounding.
+/// Zero-weight recipients are excluded, even when they have spare capacity.
+/// A zero budget succeeds even when all weights are zero.
+pub fn allocate_capped<const N: usize>(
+    _ total: u128,
+    _ weights: [u128; N],
+    _ caps: [u128; N],
+    _ tie_break: TieBreak,
+) -> Result<AllocationError, Allocation<N>>
+where N > 0 && N <= 64
+{
+    var shares: [u128; N] = [0; N]
+    var bonuses: [bool; N] = [false; N]
+    var saturated: [bool; N] = [false; N]
+    var remainders: [u256; N] = [0; N]
+    if total == 0 {
+        return Result::Ok(
+            Allocation { shares, bonuses, saturated, remainders, rounding_denominator: 0 },
+        )
+    }
+
+    var weight_sum: u256 = 0
+    var capacity: u256 = 0
+    var i: usize = 0
+    while i < N {
+        if weights[i] > 0 {
+            weight_sum += weights[i] as u256
+            capacity += caps[i] as u256
+        }
+        i += 1
+    }
+    if weight_sum == 0 {
+        return Result::Err(AllocationError::NoPositiveWeight)
+    }
+    if capacity < total as u256 {
+        return Result::Err(AllocationError::InsufficientCapacity)
+    }
+
+    var remaining = total
+    // Freeze one binding cap per pass. At least one recipient leaves each
+    // successful pass, so this takes at most N passes, independent of total.
+    while remaining > 0 {
+        var found = false
+        i = 0
+        while i < N {
+            if weights[i] > 0 && !saturated[i] {
+                let floor_quota = (remaining as u256 * weights[i] as u256) / weight_sum
+                if (caps[i] as u256) <= floor_quota {
+                    shares[i] = caps[i]
+                    saturated[i] = true
+                    remaining -= caps[i]
+                    weight_sum -= weights[i] as u256
+                    found = true
+                    break
+                }
+            }
+            i += 1
+        }
+        if !found { break }
+    }
+
+    if remaining == 0 {
+        return Result::Ok(
+            Allocation { shares, bonuses, saturated, remainders, rounding_denominator: 0 },
+        )
+    }
+
+    // Fe's checked arithmetic is sufficient here: each multiplicand is u128,
+    // and the denominator/capacity sums contain no more than 64 u128 terms.
+    var floor_sum: u128 = 0
+    i = 0
+    while i < N {
+        if weights[i] > 0 && !saturated[i] {
+            let numerator = remaining as u256 * weights[i] as u256
+            let share: u128 = (numerator / weight_sum).downcast().unwrap()
+            shares[i] = share
+            floor_sum += share
+            remainders[i] = numerator % weight_sum
+        }
+        i += 1
+    }
+
+    var units = remaining - floor_sum
+    let start = match tie_break {
+        TieBreak::Index => 0,
+        TieBreak::Rotate(offset) => offset % N,
+    }
+    // At most N-1 units remain. Each recipient can receive at most one.
+    while units > 0 {
+        var best = N
+        var rank: usize = 0
+        while rank < N {
+            let candidate = (start + rank) % N
+            if weights[candidate] > 0 && !saturated[candidate] && !bonuses[candidate] {
+                if best == N || remainders[candidate] > remainders[best] {
+                    best = candidate
+                }
+            }
+            rank += 1
+        }
+        shares[best] += 1
+        bonuses[best] = true
+        units -= 1
+    }
+    Result::Ok(
+        Allocation { shares, bonuses, saturated, remainders, rounding_denominator: weight_sum },
+    )
+}

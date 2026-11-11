@@ -1,0 +1,17 @@
+name: Exact allocation checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download official pinned compiler
+        shell: bash
+        run: |
+          curl --fail --location --retry 3 https://github.com/argotorg/fe/releases/download/v26.5.0/fe_linux_amd64 -o "$RUNNER_TEMP/fe"
+          printf '%s  %s\n' '3732fbe8a6e9d2ea3925d02d0e3a1478bc1e01d742c2be75d3ea7300c46c45f0' "$RUNNER_TEMP/fe" | sha256sum --check
+          chmod +x "$RUNNER_TEMP/fe"
+      - name: Verify EVM, native, oracle, and rejected inputs
+        run: python3 tools/verify.py --fe "$RUNNER_TEMP/fe" --native

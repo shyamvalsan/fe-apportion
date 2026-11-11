@@ -1,0 +1,6 @@
+[ingot]
+name = "reject_zero_recipients"
+version = "0.1.0"
+
+[dependencies]
+apportion = "../../.."

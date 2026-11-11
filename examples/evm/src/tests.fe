@@ -1,0 +1,56 @@
+use ingot::{AllocationPreview, PreviewMsg}
+
+#[test]
+fn preview_returns_allocation_and_audit_fields() uses (evm: mut Evm) {
+    let calculator = evm.create2<AllocationPreview>(value: Wei::zero(), args: (), salt: 0)
+    let result: (u8, [u128; 8], [bool; 8], [bool; 8], [u256; 8], u256) = evm
+        .call(
+            addr: calculator,
+            gas: 1000000,
+            value: Wei::zero(),
+            message: PreviewMsg::Preview {
+                total: 100,
+                weights: [8, 1, 1, 0, 0, 0, 0, 0],
+                caps: [40, 100, 100, 0, 0, 0, 0, 0],
+                tie_start: 0,
+            },
+        )
+    assert!(result.0 == 0)
+    assert!(result.1[0] == 40)
+    assert!(result.1[1] == 30)
+    assert!(result.1[2] == 30)
+    assert!(result.3[0])
+    assert!(result.5 == 2)
+}
+
+#[test]
+fn preview_reports_ineligible_capacity() uses (evm: mut Evm) {
+    let calculator = evm.create2<AllocationPreview>(value: Wei::zero(), args: (), salt: 0)
+    let result: (u8, [u128; 8], [bool; 8], [bool; 8], [u256; 8], u256) = evm
+        .call(
+            addr: calculator,
+            gas: 1000000,
+            value: Wei::zero(),
+            message: PreviewMsg::Preview {
+                total: 10,
+                weights: [1, 0, 0, 0, 0, 0, 0, 0],
+                caps: [9, 100, 100, 100, 100, 100, 100, 100],
+                tie_start: 0,
+            },
+        )
+    assert!(result.0 == 2)
+    assert!(result.1[0] == 0)
+}
+
+#[test]
+fn preview_reports_zero_weights() uses (evm: mut Evm) {
+    let calculator = evm.create2<AllocationPreview>(value: Wei::zero(), args: (), salt: 0)
+    let result: (u8, [u128; 8], [bool; 8], [bool; 8], [u256; 8], u256) = evm
+        .call(
+            addr: calculator,
+            gas: 1000000,
+            value: Wei::zero(),
+            message: PreviewMsg::Preview { total: 1, weights: [0; 8], caps: [10; 8], tie_start: 0 },
+        )
+    assert!(result.0 == 1)
+}

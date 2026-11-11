@@ -1,0 +1,11 @@
+error[8-0093]: const requirement is not satisfied
+   ┌─ src/lib.fe:4:19
+   │
+ 4 │     let _result = allocate(1, [1; 0], TieBreak::Index)
+   │                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ condition evaluated to `false`
+   │
+   ┌─ src/lib.fe:35:7
+   │
+35 │ where N > 0 && N <= 64
+   │       ---------------- required by this predicate
+

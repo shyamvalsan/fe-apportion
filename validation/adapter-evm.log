@@ -1,0 +1,5 @@
+PASS  [0.0181s] preview_returns_allocation_and_audit_fields
+PASS  [0.0182s] preview_reports_ineligible_capacity
+PASS  [0.0182s] preview_reports_zero_weights
+
+test result: ok. 3 passed; 0 failed
